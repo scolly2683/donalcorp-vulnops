@@ -49,3 +49,4 @@ source: LinkedIn
 - **MCP** (Model Context Protocol) = the protocol Skills use to connect Claude to external tools and data sources
 - Building a Skills stack effectively turns Claude Code into a configurable AI operating system rather than a one-off assistant
 - The Anthropic Official Library and Partner Skills Directory are the best starting points for finding pre-built Skills to adopt
+- See also [[Everything Claude Code]] for a production-ready 48-agent, 183-skill framework built on top of Claude Code
