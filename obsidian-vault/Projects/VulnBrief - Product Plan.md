@@ -51,7 +51,21 @@ No tool bridges these. That's the gap.
 - Team/org features
 - Custom alerting rules
 - Threat actor attribution
+- Active scanning features
 - Paid tiers (ship free first, validate, then monetise)
+
+### Phase 2 additions (post-MVP)
+- Shodan + Censys + GreyNoise integration for exposure context on CVE pages
+- Watchlists — subscribe to vendors/products, get alerts on new P0/P1s (OpenCVE-powered)
+- Hudson Rock infostealer context for auth-related CVEs
+
+### Phase 3 — Scanning (scale feature, high value)
+Users enter their domain, IP range, or paste a dependency manifest. VulnBrief returns:
+- **Passive exposure check** (Shodan/Censys/GreyNoise — no active probing): "We found 3 internet-facing services on your IP range matching vulnerable software versions"
+- **Dependency scan** (OSV.dev match): "Your package.json includes axios 1.14.0 — affected by CVE-2026-XXXXX"
+- **Active scan** (Nuclei templates, authorised targets only): full vulnerability detection with explicit consent gate
+
+> **Scale note:** Scanning is the feature that converts free users to paid. Passive lookups are cheap to run at scale. Active scanning requires auth workflow, rate limiting, and legal terms. Build passive first, active as a paid-tier feature with explicit written consent capture.
 
 ---
 
@@ -68,14 +82,32 @@ No tool bridges these. That's the gap.
 | GitHub Advisory DB | Package-level advisories with ecosystem context | GraphQL API | Complements OSV, more human-readable |
 | ExploitDB | Public POC and exploit archive | Periodic scrape | POC availability signal |
 
-### Freemium / low-cost (add post-MVP)
+### Infrastructure & Exposure Intelligence (post-MVP)
 
-| Source | Data | Cost |
-|--------|------|------|
-| GreyNoise | Active scanning + exploitation in the wild | Free community tier → $500/mo |
-| CVECrowd | Community trending signal | Free |
-| Shodan | Internet-exposed instance counts for affected software | $49/mo API |
-| VirusTotal | IOC correlation | Skip — expensive, not core to this product |
+| Source | Data | Why it matters | Cost |
+|--------|------|---------------|------|
+| **Shodan** | Internet-exposed assets, vuln filters for IoT/ICS | Shows real exposure count for affected software versions | $49/mo API |
+| **Censys** | Certificate transparency, shadow cloud instances | Catches assets Shodan misses — better for cloud exposure | Free research tier |
+| **GreyNoise** | Active scanning signals — background noise vs targeted | Distinguishes "everyone is probing this" from "you are being targeted" | Free community tier |
+
+### Threat Context (post-MVP)
+
+| Source | Data | Why it matters | Cost |
+|--------|------|---------------|------|
+| **Hudson Rock** | Infostealer / stolen credential exposure | 2026 breaches increasingly start with stolen session cookies not technical exploits | Free lookup tier |
+| **OpenCVE** | Customisable CVE alert subscriptions by vendor/product | Solves the firehose problem — only surface what matters to a specific stack | Free self-hosted |
+| **CVECrowd** | Community trending signal | Practitioner attention = real-world relevance signal | Free |
+
+### Offensive/Research Tools (inform the product, don't integrate directly)
+
+| Tool | What it is | Relevance to VulnBrief |
+|------|-----------|----------------------|
+| **VulHunt (Binarly)** | AI-powered vulnerability detection in compiled software/firmware | Shows what AI-discovered vuln classes are emerging — informs pre-condition content |
+| **BlacksmithAI** | Multi-agent AI automated pen testing framework | Surfaces how vulns are being chained in practice — exploit chain research input |
+| **Betterleaks** | Leaked secrets detection (from Gitleaks creator) | Supply chain angle — secret leakage is a pre-condition for many attack chains |
+
+### Skip for now
+- VirusTotal GTI — expensive, IOC-focused, not core to this product's angle
 
 ### Claude API (core to the product)
 
@@ -274,6 +306,75 @@ osv_advisories (
 | Data accuracy for non-technical summaries | Human review queue for high-traffic CVEs |
 | Competing with free tools (CISA, NVD) | Differentiation is synthesis + pre-conditions + dual-audience — not raw data |
 | Legal: scraping ExploitDB | Use their official download/API, not aggressive scraping |
+
+---
+
+## Hosting & Scaling Architecture
+
+### Start here (MVP — cheap, simple, fast to ship)
+
+| Component | Service | Cost/mo | Notes |
+|-----------|---------|---------|-------|
+| Backend (FastAPI) | **Fly.io** | ~$10–30 | Auto-scales, simple deploy, good free tier |
+| Frontend (Next.js) | **Vercel** | Free → $20 | Best Next.js DX, global CDN built in |
+| Database | **Supabase** | Free → $25 | Managed PostgreSQL, has built-in REST API + auth |
+| Background jobs | **Fly.io** cron workers | Included | Same platform as backend |
+| File storage (CVE data dumps) | **Cloudflare R2** | ~$0 at MVP scale | S3-compatible, free egress |
+| Email (digests) | **Resend** | Free → $20 | Modern email API, great deliverability |
+
+**Total MVP cost: ~$0–75/month** until you have real traffic.
+
+### Scale path (1k–100k users)
+
+```
+                        ┌─────────────────┐
+                        │   Cloudflare    │  ← CDN, DDoS protection, caching
+                        └────────┬────────┘
+                                 │
+              ┌──────────────────┼──────────────────┐
+              │                  │                  │
+     ┌────────▼──────┐  ┌───────▼───────┐  ┌──────▼──────┐
+     │  Vercel Edge  │  │  Fly.io API   │  │  Fly.io Jobs │
+     │  (Next.js)    │  │  (FastAPI)    │  │  (ingest)    │
+     └───────────────┘  └───────┬───────┘  └──────┬──────┘
+                                │                  │
+                        ┌───────▼──────────────────▼──────┐
+                        │          Supabase                │
+                        │  PostgreSQL + pgvector (future)  │
+                        │  + Row Level Security for teams  │
+                        └──────────────────┬───────────────┘
+                                           │
+                                  ┌────────▼────────┐
+                                  │  Cloudflare R2  │
+                                  │  (CVE data, exports, scan results)
+                                  └─────────────────┘
+```
+
+**Key scaling decisions:**
+
+| Decision | Recommendation | Why |
+|----------|---------------|-----|
+| CVE data caching | Cache Claude API summaries in DB permanently | Avoid re-generating — most CVEs don't change after initial enrichment |
+| Search | Add **pgvector** to Supabase for semantic search later | Start with full-text search (PostgreSQL built-in), add vector when needed |
+| Scanning jobs | Queue with **Inngest** or **Trigger.dev** | Serverless job queue — scales to zero, cheap at low volume |
+| CDN / caching | Cloudflare in front of everything | Free tier handles enormous traffic; cache CVE pages at edge |
+| Rate limiting | Cloudflare Workers rules | Block scan abuse before it hits your backend |
+| Auth (when you add accounts) | **Supabase Auth** | Already in the stack, handles OAuth, magic links |
+
+### What to avoid early
+
+- **AWS / GCP / Azure** — too complex and expensive for MVP; migrate later if you need to
+- **Kubernetes** — massively over-engineered until you have 10+ services
+- **Self-managed PostgreSQL** — Supabase handles backups, replication, and connection pooling for you
+
+### When to migrate
+
+| Trigger | Action |
+|---------|--------|
+| > 10k daily active users | Add Redis (Upstash) for rate limiting and session caching |
+| > 100k CVE lookups/day | Move to Neon (serverless Postgres) for connection pooling at scale |
+| Scanning feature launches | Add dedicated Fly.io worker pool for scan jobs, separate from API |
+| Enterprise tier | Consider dedicated DB instances per large customer, move to AWS RDS |
 
 ---
 
