@@ -31,3 +31,9 @@ Internal security research notes for authorised vulnerability operations.
 
 - [[Lab Setup]] — Docker lab environment for local testing
 - [[Remediation]] — Patching and mitigation guidance
+
+---
+
+## Resources
+
+- [[Claude Skills Resources]] — 17 free Claude Skills starter links (docs, blogs, examples)
