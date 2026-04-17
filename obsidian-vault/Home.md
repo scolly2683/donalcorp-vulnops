@@ -36,5 +36,4 @@ Internal security research notes for authorised vulnerability operations.
 
 ## Resources
 
-- [[Claude Skills Resources]] — 17 free Claude Skills starter links (docs, blogs, examples)
-- [[Everything Claude Code]] — Production framework: 48 agents, 183 skills, 14+ MCP servers
+Claude learning notes moved to `~/claude-learning/` vault.
