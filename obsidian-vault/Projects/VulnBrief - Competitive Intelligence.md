@@ -25,9 +25,15 @@ CVE-driven / CMDB-anchored           BAS / Control Validation
         │                                  │
    Legacy scanners                   [Wiz UVM+ASM]
                                       [Orca Security]
+
+CVE Awareness / Alerting (free tier)
+        │
+   [Intruder CVEMon]
+   [Feedly CVE]
 ```
 
 **VulnBrief sits in the CVE-driven / CMDB-anchored quadrant — the only SMB-priced player there.**
+**CVEMon and Feedly sit in a separate free-tier awareness category — not direct competitors, but occupy attention in the same audience.**
 
 ---
 
@@ -132,6 +138,72 @@ CVE-driven / CMDB-anchored           BAS / Control Validation
 
 ---
 
+### Intruder CVEMon
+
+**What it does:**
+- Free CVE monitoring and awareness tool (separate from Intruder's paid scanner)
+- Three views: Activity feed, Trending, CVE browser
+- **Activity feed:** Event timeline — KEV additions, exploit discoveries, score changes — for CVEs matching your watchlist
+- **Trending / Hypemeter:** Top 10 CVEs trending on social media in the last 24 hours. Scored 0–100 ("Hypemeter") measuring social attention, not exploitability. Refreshes every ~24 mins.
+- **CVE browser:** Browse by technology, product, vulnerability type. Latest feed of published CVEs with description snippets.
+- **CVE detail:** CVSS score + severity badge, "Exploit known" flag (fire icon), product/vendor tags, tabs for Overview / Scores / Known Exploits / Weaknesses.
+
+**CVE prioritization:** CVSS-led. No EPSS shown on main view. No composite scoring. No pre-conditions. Alerting based on KEV status changes and new exploit disclosures.
+
+**Pricing:** Free. Funnel into Intruder's paid scanner.
+
+**Target audience:** Security practitioners who want a free CVE news feed — not a prioritisation or decision-support tool.
+
+**Gap for VulnBrief:** CVEMon tells you *what happened* (KEV added, exploit found). VulnBrief tells you *what it means for your environment and what to do*. Completely different jobs.
+
+**Interesting feature — Hypemeter:** Social media trending score is a legitimate supplementary signal. High Hypemeter = researcher/attacker attention is spiking, independent of official EPSS. Worth watching as a future data source for VulnBrief's threat freshness signal.
+
+---
+
+### Feedly CVE
+
+**What it does:**
+- CVE intelligence layer built on top of Feedly's content aggregation platform
+- **CVE detail page:** CVSS gauge + EPSS (shown as % alongside CVSS) + severity badge + status labels (Trending / Proof of exploit / Proof of concept / Exploited in the wild)
+- **EUVD cross-reference:** Shows European Vulnerability Database ID alongside CVE ID — rare in the market
+- **AI-generated CVSS estimate:** Before NVD publishes an official score, Feedly estimates CVSS severity from article content, attack complexity, and exploit information. Timestamps the estimate.
+- **AI-generated Summary + Impact:** Plain-language summary of what the CVE does, who it affects, and attack impact. Names active campaigns (e.g., "RedSun/BlueHammer campaign") when detected in the wild.
+- **Exploitation section:** Aggregates PoC sources — GitHub repos, security blogs, researcher posts. Named sources shown.
+- **CVE Timeline:** Chronological event log per CVE:
+  - First article mentioning the CVE
+  - CVSS estimate (Feedly's own AI estimate)
+  - CVSS publication (official NVD)
+  - Scanner detection added (e.g., "Detection added to Qualys QID 92373")
+  - KEV addition
+  - First PoC/exploit disclosure
+- **Trending Vulnerabilities homepage:** CVE cards with sparkline activity charts (media mention volume over time)
+- **Track Updates:** Email watchlist alerting per CVE
+
+**CVE prioritization:** CVSS-led, EPSS shown (but secondary — small text beneath CVSS gauge, not the lead signal). No composite scoring. No pre-conditions.
+
+**Pricing:** Freemium. CVE detail pages appear accessible without login. Full watchlist and feed features behind Feedly Pro/Team subscription.
+
+**Target audience:** Threat intel teams, CTI analysts, security researchers. Content-aggregation heritage — very strong on *news and narrative* around a CVE.
+
+**What VulnBrief should borrow from Feedly:**
+
+| Feedly Feature | VulnBrief Version | Priority |
+|---|---|---|
+| CVE Timeline (events as ordered list) | Show KEV addition date, first PoC date, NVD publish date on CVE detail | v2.0 |
+| Scanner detection events | "Detection available in Qualys/Tenable" signal | v3.0 (Enterprise) |
+| AI CVSS estimate pre-NVD | Not needed — we weight EPSS and KEV, not raw CVSS | — |
+| Trending sparkline charts | Activity trend on dashboard / trending CVEs widget | v2.0 |
+| Campaign name attribution | Where active exploitation is named (e.g., campaign names) | v3.0 |
+
+**Where VulnBrief beats Feedly:**
+- EPSS-first (Feedly buries it under CVSS)
+- Pre-condition analysis (Feedly has none)
+- Composite scoring (Feedly has none — it's still CVSS-led)
+- Remediation brief (Feedly describes the problem, not the fix)
+- SMB price point and operational focus (Feedly is CTI-analyst tool, not patch-decision tool)
+
+---
+
 ### Wiz (UVM + ASM)
 
 **What it does:**
@@ -165,17 +237,19 @@ CVE-driven / CMDB-anchored           BAS / Control Validation
 
 ## Competitive Positioning Summary
 
-| Dimension | VulnBrief | Nucleus | Tenable | NodeZero | Wiz |
-|---|---|---|---|---|---|
-| **EPSS-first?** | Yes | Yes (+custom) | VPR composite | No | Yes (+context) |
-| **Pre-conditions?** | Yes (unique depth) | No | No | Implicit | Partially |
-| **Plain-English layer?** | Yes (unique) | No | No | No | No |
-| **Asset Profile matching?** | Planned v2.0 | Yes | Yes (manual) | Yes (automated) | Yes (Security Graph) |
-| **Attack chain visualization?** | Planned v2.0 | No | No | Yes (dynamic) | Yes (attack paths) |
-| **SMB price point?** | Yes ($49/mo) | No ($10+/device) | No ($50K+ min) | No | No |
-| **Open source scoring?** | Yes | No | No | No | No |
-| **BAS / control validation?** | No | No | No | Partial | No |
-| **Cloud-native?** | Planned v3.0 | Partial | Recent add | Yes | Yes |
+| Dimension | VulnBrief | Nucleus | Tenable | NodeZero | Wiz | CVEMon | Feedly CVE |
+|---|---|---|---|---|---|---|---|
+| **EPSS-first?** | Yes | Yes (+custom) | VPR composite | No | Yes (+context) | No | No (CVSS-first) |
+| **EPSS shown at all?** | Yes (lead) | Yes | Yes (input) | No | Yes | No | Yes (secondary) |
+| **Pre-conditions?** | Yes (unique) | No | No | Implicit | Partially | No | No |
+| **Plain-English layer?** | Yes (unique) | No | No | No | No | No | Yes (AI summary) |
+| **Remediation guidance?** | Yes | Partial | Partial | No | No | No | No |
+| **CVE Timeline/events?** | No (v2.0) | No | No | No | No | Partial | Yes (strong) |
+| **Asset Profile matching?** | Planned v2.0 | Yes | Yes | Yes | Yes | No | No |
+| **Attack chain?** | Planned v2.0 | No | No | Yes | Yes | No | No |
+| **SMB price point?** | Yes ($49/mo) | No | No | No | No | Free | Freemium |
+| **Open scoring?** | Yes | No | No | No | No | — | No |
+| **Trending/social signal?** | No | No | No | No | No | Yes (Hypemeter) | Yes (sparklines) |
 
 ---
 
@@ -219,6 +293,14 @@ Beyond GitHub PoC refs, add:
 
 **4. Threat Intel Freshness Signal**
 Show when PoC activity was last detected, not just whether it exists. Wiz Q1 2025 data: 28.3% of exploited CVEs weaponized within 24 hours. Recency matters.
+
+**5. CVE Lifecycle Timeline (from Feedly)**
+Display a chronological event log on each CVE detail page:
+- NVD published date
+- First PoC/exploit disclosure date
+- KEV addition date
+- Scanner detection added (Qualys/Tenable plugin ID)
+This converts static CVE data into a narrative: "this CVE was published 3 days ago, a PoC appeared yesterday, it hit KEV today." Context that changes the urgency signal immediately.
 
 ### Medium-term (v3.0)
 
