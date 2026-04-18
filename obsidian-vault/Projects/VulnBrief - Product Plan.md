@@ -58,6 +58,9 @@ No tool bridges these. That's the gap.
 - Shodan + Censys + GreyNoise integration for exposure context on CVE pages
 - Watchlists — subscribe to vendors/products, get alerts on new P0/P1s (OpenCVE-powered)
 - Hudson Rock infostealer context for auth-related CVEs
+- **Asset Profile Module** — users define their software stack, network exposure tier, and auth config once; CVEs auto-matched to profile; risk score becomes personalized (see Competitive Intelligence note — this is the gap all enterprise tools address only at $50K+)
+- **Compensating Controls question in Pre-Condition Wizard** — add Q6: "Does a WAF / EDR / network segment mitigate this vector?" (what Cymulate validates at enterprise scale, VulnBrief asks as a wizard question)
+- **Exploit maturity expansion** — beyond GitHub PoCs: add Metasploit module availability, Nuclei template availability, ExploitDB entry presence, time-to-weaponization estimate (Wiz Q1 2025: 28.3% of exploited CVEs weaponized within 24h — recency of PoC activity matters as much as presence)
 
 ### Phase 3 — Scanning (scale feature, high value)
 Users enter their domain, IP range, or paste a dependency manifest. VulnBrief returns:
@@ -290,10 +293,12 @@ osv_advisories (
 
 ## Moats (what makes this hard to copy quickly)
 
-1. **Pre-condition quality** — building accurate pre-condition checklists requires security expertise. Automating this well is hard. Your Glasswing research is the training input.
+1. **Pre-condition quality** — building accurate pre-condition checklists requires security expertise. Automating this well is hard. Your Glasswing research is the training input. No other platform in the market addresses this at the CVE level.
 2. **Summarisation quality** — Claude API summaries need tuning per CVE class. Good prompt engineering here creates a real quality gap vs competitors.
 3. **Community trust** — if practitioners find it accurate, they share it. Feedly/VirusTotal took years to build that trust.
 4. **Supply chain depth** — OSV + GitHub Advisory + ExploitDB combined gives better coverage than any single source.
+5. **Transparent scoring** — Nucleus and Tenable's VPR are black boxes. VulnBrief's composite score (EPSS 35% / KEV 30% / CVSS 20% / PoC 15%) is inspectable and explainable. Practitioners trust what they can audit.
+6. **SMB price point with enterprise features** — Nucleus starts at $10/device/year (SMB-hostile at minimum deployment). Tenable minimum is $50K/year. VulnBrief's $49/mo Practitioner tier has no viable competition in the sub-$10K/year range for EPSS-first, pre-condition-aware CVE intelligence.
 
 ---
 
