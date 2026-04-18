@@ -275,17 +275,58 @@ vercel --prod
 
 ## After Deployment — Seeding Data
 
-A fresh deployment has an empty database. You need to run the ingestion jobs to populate it:
+A fresh deployment has an empty database. You need to run the ingestion jobs to populate it.
+
+### Waking a stopped machine first
+
+Fly auto-stops machines when idle (`min_machines_running = 0`). If `fly ssh console` returns "no started VMs", wake it first:
+
+```powershell
+# Windows PowerShell — wake the machine, then SSH immediately
+Invoke-WebRequest -Uri "https://vulnbrief-api.fly.dev/health" -UseBasicParsing
+fly ssh console --app vulnbrief-api
+```
+
+Or get the machine ID and start it directly:
+```powershell
+fly machine list --app vulnbrief-api
+fly machine start <machine-id>
+fly ssh console --app vulnbrief-api
+```
+
+### Running the seed
+
+Once inside the Fly SSH session (you'll see a Linux prompt):
 
 ```bash
-# SSH into your Fly app
-fly ssh console --app vulnbrief-api
-
-# Run ingestion scripts
-python -m app.ingest.kev      # CISA Known Exploited Vulnerabilities
-python -m app.ingest.epss     # EPSS exploitation probability scores
-python -m app.ingest.nvd      # NVD CVE data (takes longer)
+cd /app
+python seed.py
 ```
+
+`seed.py` runs all ingestion steps in order, each in its own DB session. Individual step failures don't stop the rest.
+
+**What each step does:**
+| Step | Data | Time |
+|---|---|---|
+| KEV | 1,500+ confirmed-exploited CVEs from CISA | ~10 seconds |
+| EPSS | 200,000+ exploitation probability scores | ~2 minutes |
+| NVD backfill (120 days) | Full CVE records, CVSS, CWE, references | ~10–15 minutes |
+| ChainNVD | CVE-to-CVE links from NVD reference fields | ~2 minutes |
+| ChainKEV | CVE links grouped by ransomware campaign | ~5 seconds |
+
+**Expected output when complete:**
+```
+INFO KEV done: {'source': 'kev', 'upserted': 1569}
+INFO EPSS done: {'source': 'epss', 'upserted': 218432}
+INFO NVD done: {'source': 'nvd_backfill', 'fetched': 22000, 'upserted': 22000}
+INFO Chain NVD done: {'scanned': 22000, 'links_created': 4200, ...}
+INFO Chain KEV done: {'campaigns': 14, 'cves': 340, 'links_created': 680}
+INFO Seed complete.
+```
+
+### Re-running after updates
+
+The seed is safe to re-run — every ingest uses upserts (insert or update). Re-running after a code change only takes a few minutes because KEV and chain steps are fast and NVD will upsert any changed records.
 
 ---
 
@@ -299,6 +340,10 @@ python -m app.ingest.nvd      # NVD CVE data (takes longer)
 | 500 errors from API | Run `fly logs --app vulnbrief-api` for stack trace |
 | Database connection refused | Check the Fly Postgres app is running: `fly status --app vulnbrief-db` |
 | Slow cold start | App scaled to zero — first request wakes it up, takes ~3s |
+| `fly ssh console` — no started VMs | Machine is stopped; wake via health endpoint first (see Seeding section) |
+| EPSS ingest fails with 302 redirect | Ensure `follow_redirects=True` is set on the httpx client in `epss.py` |
+| `cd /app` not found | You ran this in PowerShell instead of inside the Fly SSH session — SSH first |
+| Database "vulnbrief" does not exist | Run `fly postgres connect --app vulnbrief-db` then `CREATE DATABASE vulnbrief;` |
 
 ---
 

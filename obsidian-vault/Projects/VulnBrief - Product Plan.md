@@ -1,7 +1,8 @@
 ---
 tags: [project, startup, product, vulnerability-intelligence, glasswing]
 created: 2026-04-17
-status: planning
+updated: 2026-04-18
+status: active — v1 deployed, chain index shipped
 ---
 
 # VulnBrief — Vulnerability Intelligence for Everyone
@@ -35,32 +36,68 @@ No tool bridges these. That's the gap.
 
 ---
 
-## MVP Scope (v1 — build this first)
+## What Is Live (v1 — deployed April 2026)
 
-### In scope
-- [ ] CVE detail page: technical view + plain-English view (Claude API)
-- [ ] Search by CVE ID, vendor, product, CWE
-- [ ] Dashboard: trending by EPSS, CISA KEV additions, community signal
-- [ ] Pre-condition questionnaire for each CVE (5 questions max)
-- [ ] Supply chain lookup: package name + version → affected CVEs
-- [ ] Weekly digest email: plain-English P0/P1 summary
+**Frontend:** https://vulnbrief.vercel.app
+**Backend:** https://vulnbrief-api.fly.dev
+**Database:** Fly.io Postgres (vulnbrief-db, London region)
 
-### Out of scope for v1
-- User accounts / saved watchlists
-- API access for third parties
-- Team/org features
-- Custom alerting rules
-- Threat actor attribution
-- Active scanning features
-- Paid tiers (ship free first, validate, then monetise)
+### Shipped and working
+- [x] CVE detail page: EPSS gauge, CVSS, KEV status, risk score, plain-English summary (Claude API), pre-conditions, exploit chain context, remediation brief, PoC references
+- [x] Search by CVE ID, keyword
+- [x] Dashboard: trending CVEs, KEV additions, stats
+- [x] Pre-condition questionnaire (5-question wizard → LIKELY/POSSIBLY/UNLIKELY verdict)
+- [x] Supply chain lookup: package + version → affected CVEs via OSV
+- [x] Composite risk scoring: EPSS 35% / KEV 30% / CVSS 20% / PoC 15%
+- [x] **CVE Chain Index** — `cve_chain_links` table, NVD reference parser, KEV campaign grouper, `GET /cves/{id}/chains` API, ChainLinks frontend component with confidence badges and campaign grouping
+- [x] Auto-deploy: Vercel watches GitHub main branch
 
-### Phase 2 additions (post-MVP)
-- Shodan + Censys + GreyNoise integration for exposure context on CVE pages
-- Watchlists — subscribe to vendors/products, get alerts on new P0/P1s (OpenCVE-powered)
-- Hudson Rock infostealer context for auth-related CVEs
-- **Asset Profile Module** — users define their software stack, network exposure tier, and auth config once; CVEs auto-matched to profile; risk score becomes personalized (see Competitive Intelligence note — this is the gap all enterprise tools address only at $50K+)
-- **Compensating Controls question in Pre-Condition Wizard** — add Q6: "Does a WAF / EDR / network segment mitigate this vector?" (what Cymulate validates at enterprise scale, VulnBrief asks as a wizard question)
-- **Exploit maturity expansion** — beyond GitHub PoCs: add Metasploit module availability, Nuclei template availability, ExploitDB entry presence, time-to-weaponization estimate (Wiz Q1 2025: 28.3% of exploited CVEs weaponized within 24h — recency of PoC activity matters as much as presence)
+### Data seeded
+- 1,569 CISA KEV entries
+- 200k+ EPSS scores
+- ~22,000 NVD CVEs (last 120 days)
+- Chain links from NVD references (low confidence) + KEV campaigns (medium confidence)
+
+---
+
+## Next Features (Phase 2)
+
+### Immediate build queue
+
+**1. MSRC Patch Supersedence** ← high value for Windows shops
+- Ingest MSRC CVRF API (monthly security updates)
+- `cve_patches` table: CVE → KB mapping
+- `patch_supersedence` table: KB → superseded_by KB
+- Display on CVE detail: "Fix: KB5032189 — superseded by KB5033375"
+- Microsoft ExploitabilityIndex as 5th composite score component for Windows CVEs
+- See: [[VulnBrief - Patch Supersedence Feature]]
+
+**2. CVE Lifecycle Timeline** ← from Feedly competitive analysis
+- Show chronological event log per CVE: NVD published, first PoC date, KEV addition date, scanner detection
+- Converts static data into narrative: "published 3 days ago, PoC appeared yesterday, KEV today"
+- Data already in DB — mostly a frontend addition
+
+**3. Exploit Maturity Expansion**
+- Add Metasploit module availability check
+- Add Nuclei template availability check
+- ExploitDB entry presence
+- "Time to weaponisation" estimate (Wiz: 28.3% weaponised within 24h of publication)
+
+**4. Compensating Controls in Pre-Condition Wizard**
+- Add Q6: "Do you have compensating controls for this vector?" (WAF / EDR / network segmentation / MFA)
+- What Cymulate validates at enterprise scale; VulnBrief asks as a questionnaire question
+
+**5. Shodan/Censys passive exposure lookup**
+- On CVE detail page: "X internet-facing assets found running affected software version"
+- No active scanning — passive lookup only
+- Shodan API ($49/mo) or Censys free research tier
+
+### Medium-term (Phase 2 continued)
+
+- **Asset Profile Module** — users define software inventory, network exposure tier, auth config; CVEs auto-matched; risk score personalised
+- **Chain Completion Risk** — detect when a user's asset profile contains multiple CVEs from the same documented chain; alert "chain completable in your environment"
+- **Reachability scoring** — fourth dimension alongside EPSS/KEV/CVSS: is this CVE reachable given your network topology?
+- **DFIR Report integration** — manual curation of chain links from real IR cases; high-confidence chain enrichment
 
 ### Phase 3 — Scanning (scale feature, high value)
 Users enter their domain, IP range, or paste a dependency manifest. VulnBrief returns:
@@ -199,7 +236,7 @@ vulnbrief/
 
 ---
 
-## Database Schema (key tables)
+## Database Schema (live tables — April 2026)
 
 ```sql
 -- Core CVE record
@@ -207,53 +244,108 @@ cves (
   id TEXT PRIMARY KEY,          -- CVE-2026-32746
   published_at TIMESTAMP,
   last_modified TIMESTAMP,
-  cvss_score FLOAT,
-  cvss_vector TEXT,
+  cvss_v3_score NUMERIC(4,1),
+  cvss_v3_vector TEXT,
+  cvss_v3_severity TEXT,
   description TEXT,
   cwe_ids TEXT[],
-  affected_products JSONB,      -- CPE list
-  references JSONB
+  affected_products JSONB,      -- CPE list from NVD
+  references JSONB,             -- NVD reference array
+  created_at TIMESTAMP,
+  updated_at TIMESTAMP
 )
 
--- Enrichment
+-- EPSS exploitation probability (daily, one row per CVE per date)
 epss_scores (
-  cve_id TEXT,
-  score FLOAT,                  -- 0.0–1.0
-  percentile FLOAT,
-  scored_at DATE
+  id SERIAL PRIMARY KEY,
+  cve_id TEXT FK→cves,
+  score NUMERIC(7,6),           -- 0.0–1.0
+  percentile NUMERIC(7,6),
+  scored_date TEXT              -- YYYY-MM-DD
+  UNIQUE(cve_id, scored_date)
 )
 
 kev_entries (
-  cve_id TEXT PRIMARY KEY,
+  cve_id TEXT PRIMARY KEY FK→cves,
   vendor TEXT,
   product TEXT,
-  added_date DATE,
-  due_date DATE,
-  ransomware_use TEXT,
+  vulnerability_name TEXT,
+  date_added TEXT,
+  due_date TEXT,
+  required_action TEXT,
+  ransomware_campaign TEXT,     -- used to group chain links
   notes TEXT
 )
 
 -- Plain-English summaries (Claude-generated, cached)
 summaries (
-  cve_id TEXT PRIMARY KEY,
+  cve_id TEXT PRIMARY KEY FK→cves,
   technical_summary TEXT,
   plain_english TEXT,
   business_impact TEXT,
   pre_conditions JSONB,         -- structured checklist
-  chain_context TEXT,
+  chain_context TEXT,           -- Claude-generated text (Phase 2: structured graph)
+  remediation_brief TEXT,
+  priority_rationale TEXT,
+  model_used TEXT,
+  prompt_version TEXT,
   generated_at TIMESTAMP,
-  model_used TEXT
+  needs_refresh BOOLEAN
 )
 
--- Supply chain
+-- Supply chain (OSV.dev advisories)
 osv_advisories (
-  osv_id TEXT PRIMARY KEY,
-  cve_id TEXT,
-  ecosystem TEXT,               -- npm, PyPI, Go, etc.
+  id TEXT PRIMARY KEY,          -- OSV advisory ID
+  cve_id TEXT FK→cves,
+  ecosystem TEXT,               -- npm, PyPI, Go, Maven, etc.
   package_name TEXT,
   affected_versions TEXT[],
-  fixed_versions TEXT[]
+  fixed_versions TEXT[],
+  published_at TIMESTAMP
 )
+
+-- PoC / exploit references
+poc_refs (
+  id SERIAL PRIMARY KEY,
+  cve_id TEXT FK→cves,
+  source TEXT,                  -- github, exploitdb, metasploit
+  url TEXT,
+  maturity TEXT,
+  published_at TEXT
+)
+
+-- CVE chain links (shipped April 2026)
+-- Links CVEs that are documented together in attack chains
+cve_chain_links (
+  id SERIAL PRIMARY KEY,
+  source_cve_id TEXT FK→cves,
+  linked_cve_id TEXT FK→cves,
+  chain_role TEXT,              -- initial_access, info_leak, privilege_escalation, etc.
+  direction TEXT,               -- forward / backward
+  confidence TEXT,              -- low / medium / high
+  source_type TEXT,             -- nvd_reference, cisa_advisory, dfir_report, manual
+  source_ref TEXT,
+  campaign_name TEXT,           -- e.g. "ALPHV Apr 2026"
+  created_at TIMESTAMP
+  UNIQUE(source_cve_id, linked_cve_id, chain_role, source_type)
+)
+
+-- Ingest audit log
+ingest_log (
+  id SERIAL PRIMARY KEY,
+  source TEXT,                  -- kev, epss, nvd_backfill, chain_nvd, chain_kev...
+  started_at TIMESTAMP,
+  finished_at TIMESTAMP,
+  records_fetched INT,
+  records_upserted INT,
+  status TEXT,                  -- running / success / error
+  error_message TEXT
+)
+
+-- PLANNED (Phase 2)
+-- cve_patches: CVE → KB mapping from MSRC
+-- patch_supersedence: KB → superseded_by KB
+-- chain_campaigns: named attack campaigns with ordered CVE steps
 ```
 
 ---
